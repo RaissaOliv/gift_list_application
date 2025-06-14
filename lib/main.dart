@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -13,7 +15,7 @@ class MyApp extends StatelessWidget {
       title: 'Flutter Demo',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true, // Use Material 3 design
+        useMaterial3: true,
       ),
       home: const LoginPage(),
     );
@@ -21,7 +23,7 @@ class MyApp extends StatelessWidget {
 }
 
 // ===========================================
-// Nova Tela de Login (LoginPage)
+// LOGIN
 // ===========================================
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -31,31 +33,72 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // Controladores para os campos de texto de email e senha
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // Função para simular o processo de login
-  void _login() {
-    final String email = _emailController.text;
+  // URL base da API. Como estamos rodando o app por emulador Android, usamos 10.0.2.2
+  final String _baseUrl = 'http://10.0.2.2:5500'; 
+
+  Future<void> _login() async {
+    final String username = _usernameController.text;
     final String password = _passwordController.text;
 
-    // Simulação de autenticação
-    // Em uma aplicação real, você faria uma chamada a uma API aqui.
-    if (email == 'testuser' && password == 'testpassword') {
-      // Se o login for bem-sucedido, navega para a MyHomePage
-      // `pushReplacement` impede que o usuário volte para a tela de login pelo botão de voltar
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const MyHomePage(title: 'Lista de Presentes'), // Título atualizado
-        ),
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/auth/login'), 
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(<String, String>{
+          'username': username,
+          'password': password,
+        }),
       );
-    } else {
-      // Se o login falhar, mostra um SnackBar (mensagem temporária)
+
+      // Verifica se o widget ainda está montado antes de usar o context
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        // Se o login for bem-sucedido, extrai o token de acesso
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final String accessToken = responseData['access_token'];
+        print('Login bem-sucedido! Token: $accessToken');
+
+        // Navega para a MyHomePage, passando o token de acesso
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MyHomePage(
+              title: 'Lista de Presentes',
+              accessToken: accessToken,
+            ),
+          ),
+        );
+      } else if (response.statusCode == 401) {
+        print('Erro 401: Credenciais inválidas.'); 
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Credenciais inválidas. Tente novamente.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else {
+        // Outros erros de resposta da API
+        print('Erro ao fazer login. Status Code: ${response.statusCode}, Body: ${response.body}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao fazer login: ${response.statusCode}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+    
+      if (!mounted) return;
+      print('Exceção de conexão ao fazer login: $e'); // Log de exceção
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Credenciais inválidas. Tente novamente.'),
+        SnackBar(
+          content: Text('Erro de conexão: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -67,44 +110,40 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Login', style: TextStyle(color: Colors.white)),
-        backgroundColor: Theme.of(context).colorScheme.primary, // Cor da AppBar
+        backgroundColor: Theme.of(context).colorScheme.primary,
         centerTitle: true,
       ),
       body: Center(
-        child: SingleChildScrollView( // Permite rolar a tela se o teclado aparecer
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              // Título da tela de login
               Text(
                 'Bem-vindo!',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
-              const SizedBox(height: 40), // Espaçamento
-
-              // Campo de texto para o Email
+              const SizedBox(height: 40),
+             
               TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
+                controller: _usernameController,
                 decoration: InputDecoration(
-                  labelText: 'Username',
-                  hintText: 'Digite seu username',
+                  labelText: 'Nome de Usuário',
+                  hintText: 'Digite seu nome de usuário',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  prefixIcon: const Icon(Icons.person)
+                  prefixIcon: const Icon(Icons.person),
                 ),
               ),
-              const SizedBox(height: 20), // Espaçamento
-
-              // Campo de texto para a Senha
+              const SizedBox(height: 20),
+            
               TextField(
                 controller: _passwordController,
-                obscureText: true, // Para esconder a senha
+                obscureText: true,
                 decoration: InputDecoration(
                   labelText: 'Senha',
                   hintText: 'Digite sua senha',
@@ -114,19 +153,18 @@ class _LoginPageState extends State<LoginPage> {
                   prefixIcon: const Icon(Icons.lock),
                 ),
               ),
-              const SizedBox(height: 30), // Espaçamento
-
+              const SizedBox(height: 30),
               // Botão de Login
               ElevatedButton(
-                onPressed: _login, // Chama a função _login ao pressionar
+                onPressed: _login,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary, // Cor do botão
-                  foregroundColor: Colors.white, // Cor do texto do botão
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  minimumSize: const Size(double.infinity, 50), // Faz o botão ocupar toda a largura
+                  minimumSize: const Size(double.infinity, 50),
                 ),
                 child: const Text(
                   'Entrar',
@@ -134,11 +172,9 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Exemplo de botão para "Esqueceu a senha?"
+              // "Esqueceu a senha" não funcional, mas implementamos como mock :]
               TextButton(
                 onPressed: () {
-                  // Ação para "Esqueceu a senha?"
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Funcionalidade de recuperação de senha em desenvolvimento.')),
                   );
@@ -157,45 +193,156 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // ===========================================
-// Modelo de Dados para Presente (Gift)
+//GIFT LIST
 // ===========================================
 class Gift {
-  final String name;
-  final double price;
+  final String nameGift; 
+  final double value; 
   final String description;
+  final String category;
 
-  Gift({required this.name, required this.price, required this.description});
+  Gift({
+    required this.nameGift,
+    required this.value,
+    required this.description,
+    required this.category,
+  });
+
+  // Factory constructor para criar um objeto Gift a partir de um JSON recebido da API
+  factory Gift.fromJson(Map<String, dynamic> json) {
+    return Gift(
+      nameGift: json['name_gift'] as String,
+      value: (json['value'] as num).toDouble(), 
+      description: json['description'] as String,
+      category: json['category'] as String,
+    );
+  }
+
+  // Método para converter um objeto Gift para um JSON, para enviar à API
+  Map<String, dynamic> toJson() {
+    return {
+      'name_gift': nameGift,
+      'value': value,
+      'description': description,
+      'category': category,
+    };
+  }
 }
 
 // ===========================================
-// Sua Página Inicial (MyHomePage) - Agora Lista de Presentes
+// HOME
 // ===========================================
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage({
+    super.key,
+    required this.title,
+    required this.accessToken, //Sem token = redireciona para o login
+  });
 
   final String title;
+  final String accessToken;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  // Lista de presentes para exibir
-  final List<Gift> _giftList = [];
+  List<Gift> _giftList = [];
+  bool _isLoading = true; 
+  final String _baseUrl = 'http://10.0.2.2:5500';
 
-  // Função para navegar para a tela de adicionar presente
+  @override
+  void initState() {
+    super.initState();
+    _fetchGifts(); // Carrega os presentes da API ao iniciar a tela, gerenciamento de estado
+  }
+
+  
+  Future<void> _fetchGifts() async {
+    setState(() {
+      _isLoading = true; 
+    });
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/api/gifts/'), 
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Authorization': 'Bearer ${widget.accessToken}',
+        },
+      );
+
+      // Verifica se o widget ainda está montado antes de usar o context
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final List<dynamic> responseData = jsonDecode(response.body);
+        setState(() {
+          _giftList = responseData.map((json) => Gift.fromJson(json)).toList();
+        });
+        print('Presentes carregados com sucesso. Total: ${_giftList.length}'); 
+      } else if (response.statusCode == 401) {
+        print('Erro 401 ao carregar presentes: Token inválido ou expirado.');
+        // Redirecionar para o login se o token for inválido/expirado
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sessão expirada. Por favor, faça login novamente.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (context) => const LoginPage()));
+      }
+       else if (response.statusCode == 404) {
+        setState(() {
+          _giftList = [];
+        });
+        print('Erro 404 ao carregar presentes: Nenhum presente encontrado.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Nenhum presente encontrado no servidor.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      else {
+        
+        print('Erro ao carregar presentes. Status Code: ${response.statusCode}, Body: ${response.body}'); // Log de outros erros
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar presentes: ${response.statusCode}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      print('Exceção de conexão ao carregar presentes: $e'); 
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro de conexão ao carregar presentes: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false; 
+      });
+    }
+  }
+
   void _navigateToAddGiftPage() async {
-    // `await` para esperar o resultado da tela de adicionar presente
-    final newGift = await Navigator.push(
+    // Navega para a tela de adicionar presente, passando o token de acesso
+    final bool? giftAdded = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AddGiftPage()),
+      MaterialPageRoute(
+          builder: (context) => AddGiftPage(accessToken: widget.accessToken)),
     );
 
-    // Se um novo presente for retornado (não nulo), adiciona à lista
-    if (newGift != null && newGift is Gift) {
-      setState(() {
-        _giftList.add(newGift);
-      });
+    if (!mounted) return;
+
+    // Se um presente foi adicionado com sucesso (retornado true de AddGiftPage), recarrega a lista
+    if (giftAdded != null && giftAdded) {
+      _fetchGifts();
     }
   }
 
@@ -206,55 +353,62 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
       ),
-      body: _giftList.isEmpty // Verifica se a lista está vazia
-          ? const Center(
-              child: Text(
-                'Nenhum presente adicionado ainda. Adicione um!',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _giftList.length,
-              itemBuilder: (context, index) {
-                final gift = _giftList[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8.0),
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator()) 
+          : _giftList.isEmpty // Se a lista estiver vazia após o carregamento
+              ? const Center(
+                  child: Text(
+                    'Nenhum presente adicionado ainda. Adicione um!',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          gift.name,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: _giftList.length,
+                  itemBuilder: (context, index) {
+                    final gift = _giftList[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 8.0),
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              gift.nameGift,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Preço: R\$ ${gift.value.toStringAsFixed(2)}', 
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Categoria: ${gift.category}', 
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              gift.description,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Preço: R\$ ${gift.price.toStringAsFixed(2)}', // Formata o preço
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          gift.description,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      ),
+                    );
+                  },
+                ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToAddGiftPage, // Chama a função para adicionar presente
+        onPressed: _navigateToAddGiftPage,
         tooltip: 'Adicionar Presente',
         child: const Icon(Icons.add),
       ),
@@ -263,35 +417,98 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 
 // ===========================================
-// Nova Tela para Adicionar Presente (AddGiftPage)
+//ADD GIFT SCREEN
 // ===========================================
 class AddGiftPage extends StatefulWidget {
-  const AddGiftPage({super.key});
+  const AddGiftPage({
+    super.key,
+    required this.accessToken, 
+  });
+
+  final String accessToken;
 
   @override
   State<AddGiftPage> createState() => _AddGiftPageState();
 }
 
 class _AddGiftPageState extends State<AddGiftPage> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
+  // Controladores adaptados aos campos da API
+  final TextEditingController _nameGiftController = TextEditingController();
+  final TextEditingController _valueController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _categoryController = TextEditingController();
 
-  // Chave global para o formulário, usada para validação
   final _formKey = GlobalKey<FormState>();
+  final String _baseUrl = 'http://10.0.2.2:5500'; 
 
-  void _saveGift() {
-    // Valida o formulário antes de salvar
+  Future<void> _saveGift() async {
     if (_formKey.currentState!.validate()) {
-      final String name = _nameController.text;
-      final double price = double.tryParse(_priceController.text) ?? 0.0; // Converte para double
+      final String nameGift = _nameGiftController.text;
+      final double value = double.tryParse(_valueController.text) ?? 0.0;
       final String description = _descriptionController.text;
+      final String category = _categoryController.text;
 
-      // Cria um novo objeto Gift
-      final newGift = Gift(name: name, price: price, description: description);
+      try {
+        final response = await http.post(
+          Uri.parse('$_baseUrl/api/gifts/'), 
+          headers: <String, String>{
+            'Content-Type': 'application/json; charset=UTF-8',
+            'Authorization': 'Bearer ${widget.accessToken}',
+          },
+          body: jsonEncode(<String, dynamic>{
+            'name_gift': nameGift,
+            'value': value,
+            'description': description,
+            'category': category,
+          }),
+        );
 
-      // Retorna o novo presente para a tela anterior
-      Navigator.pop(context, newGift);
+       
+        if (!mounted) return;
+
+        if (response.statusCode == 201) { 
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Presente adicionado com sucesso!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          print('Presente adicionado com sucesso! Status Code: ${response.statusCode}'); 
+          Navigator.pop(context, true); // Retorna 'true' para a tela anterior (MyHomePage)
+        } else if (response.statusCode == 401) {
+            // Token inválido/expirado
+            print('Erro 401 ao adicionar presente: Token inválido ou expirado.');
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Sessão expirada. Por favor, faça login novamente.'),
+                    backgroundColor: Colors.red,
+                ),
+            );
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginPage()));
+        }
+        else {
+          // Outros erros da API
+          print('Erro ao adicionar presente. Status Code: ${response.statusCode}, Body: ${response.body}'); 
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro ao adicionar presente: ${response.statusCode}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+           Navigator.pop(context, false); // Retorna 'false' em caso de erro
+        }
+      } catch (e) {
+        
+        if (!mounted) return;
+        print('Exceção de conexão ao adicionar presente: $e'); // Log de exceção
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro de conexão ao adicionar presente: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+         Navigator.pop(context, false); 
+      }
     }
   }
 
@@ -305,13 +522,14 @@ class _AddGiftPageState extends State<AddGiftPage> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(
-          key: _formKey, // Atribui a chave ao formulário
+          key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch, // Estica os elementos
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // Campo para o Nome do Presente
+
+
               TextFormField(
-                controller: _nameController,
+                controller: _nameGiftController,
                 decoration: InputDecoration(
                   labelText: 'Nome do Presente',
                   hintText: 'Ex: Boneca, Carro, Livro',
@@ -327,10 +545,10 @@ class _AddGiftPageState extends State<AddGiftPage> {
               ),
               const SizedBox(height: 20),
 
-              // Campo para o Preço
+
               TextFormField(
-                controller: _priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true), // Permite números e decimais
+                controller: _valueController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   labelText: 'Preço (R\$)',
                   hintText: 'Ex: 99.99',
@@ -349,10 +567,29 @@ class _AddGiftPageState extends State<AddGiftPage> {
               ),
               const SizedBox(height: 20),
 
-              // Campo para a Descrição
+
+              TextFormField(
+                controller: _categoryController,
+                decoration: InputDecoration(
+                  labelText: 'Categoria',
+                  hintText: 'Ex: Brinquedos, Eletrônicos',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.category),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, insira a categoria.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+             
+             
+
               TextFormField(
                 controller: _descriptionController,
-                maxLines: 3, // Permite múltiplas linhas
+                maxLines: 3,
                 decoration: InputDecoration(
                   labelText: 'Descrição',
                   hintText: 'Ex: Presente ideal para crianças de 5 anos.',
@@ -368,8 +605,9 @@ class _AddGiftPageState extends State<AddGiftPage> {
                 },
               ),
               const SizedBox(height: 30),
-
-              // Botão Salvar
+            
+            
+            
               ElevatedButton(
                 onPressed: _saveGift,
                 style: ElevatedButton.styleFrom(
